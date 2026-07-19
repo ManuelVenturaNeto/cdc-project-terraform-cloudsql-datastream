@@ -23,9 +23,9 @@ go run -C data-generator ./cmd/setup
 go run -C data-generator ./cmd/seed -users 20 -movies 30 -rentals 50
 
 # then, each in its own terminal, turn modules on as needed:
-go run -C data-generator ./cmd/insert                  # random table, 1/s
-go run -C data-generator ./cmd/update -interval 2s     # slower updates
-go run -C data-generator ./cmd/delete -table rentals   # deletes only rentals
+go run -C data-generator ./cmd/insert -interval 500ms    # 2 insert by second
+go run -C data-generator ./cmd/update -interval 1s       # 1 update by a second
+go run -C data-generator ./cmd/delete -interval 2s       # 2 deletes by a second
 ```
 
 `insert`, `update` and `delete` accept:
