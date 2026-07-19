@@ -56,4 +56,6 @@ resource "google_sql_user" "postgres" {
     name     = "postgres"
     instance = google_sql_database_instance.instance.name
     password = var.db_password
+
+    depends_on = [google_sql_database.database]
 }
