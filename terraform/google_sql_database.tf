@@ -4,7 +4,7 @@ resource "random_id" "db_suffix" {
 }
 
 resource "google_sql_database_instance" "instance" {
-  name                = "main-rent-movie-${random_id.db_suffix.hex}"
+  name                = "main-ecommerce-${random_id.db_suffix.hex}"
   region              = var.region
   database_version    = "POSTGRES_16"
   deletion_protection = false
@@ -58,7 +58,7 @@ resource "google_sql_database_instance" "instance" {
 }
 
 resource "google_sql_database" "database" {
-  name     = "main_rent_movie"
+  name     = "main_ecommerce"
   instance = google_sql_database_instance.instance.name
 
   depends_on = [google_sql_database_instance.instance]

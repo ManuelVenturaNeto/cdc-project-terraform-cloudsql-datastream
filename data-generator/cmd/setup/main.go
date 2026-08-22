@@ -1,6 +1,3 @@
-// Command setup creates the database schema and the Datastream prerequisites (module 1).
-// Idempotent: safe to run more than once.
-// Must run as a superuser (postgres) and before `terraform apply -var enable_stream=true`.
 package main
 
 import (
@@ -10,43 +7,15 @@ import (
 	"log"
 
 	"data-generator/internal/db"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var tables = []struct {
-	name string
-	ddl  string
-}{
-	{"movies", `
-		CREATE TABLE IF NOT EXISTS movies (
-			id SERIAL PRIMARY KEY,
-			title TEXT NOT NULL,
-			genre TEXT,
-			release_year INT,
-			duration_minutes INT,
-			synopsis TEXT
-		)`},
-	{"users", `
-		CREATE TABLE IF NOT EXISTS users (
-			id SERIAL PRIMARY KEY,
-			name TEXT NOT NULL,
-			email TEXT NOT NULL UNIQUE
-		)`},
-	{"rentals", `
-		CREATE TABLE IF NOT EXISTS rentals (
-			id SERIAL PRIMARY KEY,
-			user_id INT NOT NULL REFERENCES users(id),
-			movie_id INT NOT NULL REFERENCES movies(id),
-			start_date DATE NOT NULL,
-			end_date DATE NOT NULL
-		)`},
-}
-
 func main() {
 	var (
-		dsUser      = flag.String("datastream-user", "datastream", "role Datastream logs in as")
-		publication = flag.String("publication", "ds_publication", "publication name, must match Terraform")
-		slot        = flag.String("replication-slot", "ds_replication_slot", "slot name, must match Terraform")
+		datastreamUser = flag.String("datastream-user", "datastream", "role Datastream logs in as")
+		publication    = flag.String("publication", "ds_publication", "publication name, must match Terraform")
+		slot           = flag.String("replication-slot", "ds_replication_slot", "slot name, must match Terraform")
 	)
 	flag.Parse()
 
@@ -57,36 +26,26 @@ func main() {
 	}
 	defer pool.Close()
 
-	for _, t := range tables {
-		if _, err := pool.Exec(ctx, t.ddl); err != nil {
-			log.Fatalf("create table %s: %v", t.name, err)
-		}
-		log.Printf("table %s ready", t.name)
-	}
-
-	if err := setupCDC(ctx, pool, *dsUser, *publication, *slot); err != nil {
+	if err := setupCDC(ctx, pool, *datastreamUser, *publication, *slot); err != nil {
 		log.Fatalf("cdc setup: %v", err)
 	}
-	log.Println("schema and cdc prerequisites complete")
+	log.Println("cdc prerequisites complete")
 }
 
-// setupCDC grants the Datastream role what it needs and creates the publication and slot.
-// Terraform cannot express any of this: google_sql_user only manages name and password.
-func setupCDC(ctx context.Context, pool *pgxpool.Pool, dsUser, publication, slot string) error {
-	// Identifiers cannot be bound as parameters, so they are quoted instead
+func setupCDC(ctx context.Context, pool *pgxpool.Pool, datastreamUser, publication, slot string) error {
 	grants := []string{
-		fmt.Sprintf(`ALTER USER %s WITH REPLICATION`, quoteIdent(dsUser)),
-		fmt.Sprintf(`GRANT USAGE ON SCHEMA public TO %s`, quoteIdent(dsUser)),
-		fmt.Sprintf(`GRANT SELECT ON ALL TABLES IN SCHEMA public TO %s`, quoteIdent(dsUser)),
-		// Covers tables created after this run, by seed and by later migrations
-		fmt.Sprintf(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO %s`, quoteIdent(dsUser)),
+		fmt.Sprintf(`ALTER USER %s WITH REPLICATION`, quoteIdentifier(datastreamUser)),
+		fmt.Sprintf(`GRANT USAGE ON SCHEMA public TO %s`, quoteIdentifier(datastreamUser)),
+		fmt.Sprintf(`GRANT SELECT ON ALL TABLES IN SCHEMA public TO %s`, quoteIdentifier(datastreamUser)),
+		fmt.Sprintf(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO %s`,
+			quoteIdentifier(datastreamUser)),
 	}
-	for _, stmt := range grants {
-		if _, err := pool.Exec(ctx, stmt); err != nil {
-			return fmt.Errorf("%s: %w", stmt, err)
+	for _, statement := range grants {
+		if _, err := pool.Exec(ctx, statement); err != nil {
+			return fmt.Errorf("%s: %w", statement, err)
 		}
 	}
-	log.Printf("role %s ready for replication", dsUser)
+	log.Printf("role %s ready for replication", datastreamUser)
 
 	var hasPublication bool
 	if err := pool.QueryRow(ctx,
@@ -97,22 +56,21 @@ func setupCDC(ctx context.Context, pool *pgxpool.Pool, dsUser, publication, slot
 	if hasPublication {
 		log.Printf("publication %s already present", publication)
 	} else {
-		// FOR ALL TABLES also picks up tables created later
 		if _, err := pool.Exec(ctx,
-			fmt.Sprintf(`CREATE PUBLICATION %s FOR ALL TABLES`, quoteIdent(publication)),
+			fmt.Sprintf(`CREATE PUBLICATION %s FOR ALL TABLES`, quoteIdentifier(publication)),
 		); err != nil {
 			return fmt.Errorf("create publication: %w", err)
 		}
 		log.Printf("publication %s created", publication)
 	}
 
-	// On Cloud SQL not even postgres has REPLICATION, and the slot below needs it
-	var self string
-	if err := pool.QueryRow(ctx, `SELECT current_user`).Scan(&self); err != nil {
+	var currentUser string
+	if err := pool.QueryRow(ctx, `SELECT current_user`).Scan(&currentUser); err != nil {
 		return fmt.Errorf("current_user: %w", err)
 	}
-	if _, err := pool.Exec(ctx, fmt.Sprintf(`ALTER USER %s WITH REPLICATION`, quoteIdent(self))); err != nil {
-		return fmt.Errorf("grant replication to %s: %w", self, err)
+	if _, err := pool.Exec(ctx,
+		fmt.Sprintf(`ALTER USER %s WITH REPLICATION`, quoteIdentifier(currentUser))); err != nil {
+		return fmt.Errorf("grant replication to %s: %w", currentUser, err)
 	}
 
 	var hasSlot bool
@@ -134,15 +92,14 @@ func setupCDC(ctx context.Context, pool *pgxpool.Pool, dsUser, publication, slot
 	return nil
 }
 
-// quoteIdent escapes a SQL identifier for interpolation into DDL.
-func quoteIdent(s string) string {
-	out := make([]rune, 0, len(s)+2)
-	out = append(out, '"')
-	for _, r := range s {
-		if r == '"' {
-			out = append(out, '"')
+func quoteIdentifier(identifier string) string {
+	quoted := make([]rune, 0, len(identifier)+2)
+	quoted = append(quoted, '"')
+	for _, character := range identifier {
+		if character == '"' {
+			quoted = append(quoted, '"')
 		}
-		out = append(out, r)
+		quoted = append(quoted, character)
 	}
-	return string(append(out, '"'))
+	return string(append(quoted, '"'))
 }

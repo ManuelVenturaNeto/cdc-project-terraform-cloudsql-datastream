@@ -81,7 +81,7 @@ resource "google_datastream_stream" "postgres_to_bigquery" {
       append_only {}
 
       single_target_dataset {
-        dataset_id = google_bigquery_dataset.cdc_movies.id
+        dataset_id = google_bigquery_dataset.cdc_ecommerce.id
       }
     }
   }
@@ -92,7 +92,7 @@ resource "google_datastream_stream" "postgres_to_bigquery" {
   depends_on = [
     google_datastream_connection_profile.source,
     google_datastream_connection_profile.destination,
-    google_bigquery_dataset.cdc_movies,
+    google_bigquery_dataset.cdc_ecommerce,
     google_compute_firewall.allow_datastream_to_proxy,
   ]
 }
