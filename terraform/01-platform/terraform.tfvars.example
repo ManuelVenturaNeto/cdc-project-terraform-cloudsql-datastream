@@ -1,0 +1,12 @@
+project_id = "your-project-id"
+region     = "us-central1"
+
+# Cloud SQL blocks name reuse for up to a week: after a destroy, bump this here
+# and in 02-cdc
+db_instance_name = "main-ecommerce"
+
+# Your public IP in CIDR form: curl ifconfig.me
+my_ip = "203.0.113.7/32"
+
+db_password_postgres   = "changeme"
+db_password_datastream = "changeme"

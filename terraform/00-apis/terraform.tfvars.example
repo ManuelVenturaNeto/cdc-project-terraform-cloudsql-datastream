@@ -1,0 +1,5 @@
+project_id = "your-project-id"
+region     = "us-central1"
+
+# true also turns the APIs off on destroy; see variable.tf before flipping it
+disable_on_destroy = false
