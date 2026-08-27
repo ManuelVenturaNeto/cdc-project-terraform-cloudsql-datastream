@@ -31,8 +31,16 @@ resource "google_bigquery_connection" "lakehouse" {
   cloud_resource {}
 }
 
+
+resource "time_sleep" "connection_service_account" {
+  depends_on      = [google_bigquery_connection.lakehouse]
+  create_duration = "30s"
+}
+
 resource "google_storage_bucket_iam_member" "lakehouse_writer" {
   bucket = google_storage_bucket.lakehouse.name
   role   = "roles/storage.admin"
   member = "serviceAccount:${google_bigquery_connection.lakehouse.cloud_resource[0].service_account_id}"
+
+  depends_on = [time_sleep.connection_service_account]
 }

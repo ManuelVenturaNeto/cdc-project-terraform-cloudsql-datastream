@@ -67,6 +67,14 @@ By default the APIs stay enabled, which costs nothing: you pay for resources, no
 for an API being on. Disabling them affects the whole project, not only this
 demo, so it is opt-in.
 
+Stop the generator loops before destroying `01-platform`: an open connection
+makes `DROP DATABASE` fail with "database is being accessed by other users".
+
+The two database users carry `deletion_policy = "ABANDON"`, because a role that
+owns tables or holds grants, which is what the generator leaves behind, cannot be
+dropped through the API. Destroy forgets them instead; deleting the instance
+removes them for real.
+
 Destroying `02-cdc` deletes the stream but leaves `ds_replication_slot` behind in
 Postgres, holding WAL. If you are keeping the database, drop it yourself:
 

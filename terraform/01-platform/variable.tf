@@ -16,8 +16,9 @@ variable "db_instance_name" {
 }
 
 variable "my_ip" {
-  description = "Your public IP in CIDR form, so you can reach the database: curl ifconfig.me"
+  description = "Your public IP in CIDR form. Leave unset to detect it automatically."
   type        = string
+  default     = null
 }
 
 # Published at https://cloud.google.com/datastream/docs/ip-allowlists-and-regions
